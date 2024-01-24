@@ -1,11 +1,13 @@
 TAG: 'CARLA_perception'
 
-GPUS: [0, 1, 2, 3]
+# GPUS: [0, 1, 2, 3]
+GPUS: [0]
 
 BATCHSIZE: 6
 PRECISION: 16
 EPOCHS: 20
 
+# N_WORKERS: 8
 N_WORKERS: 8
 
 DATASET:

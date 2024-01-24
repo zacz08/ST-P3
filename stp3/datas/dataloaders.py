@@ -3,6 +3,7 @@ import torch.utils.data
 from nuscenes.nuscenes import NuScenes
 from stp3.datas.NuscenesData import FuturePredictionDataset
 from stp3.datas.CarlaData import CarlaDataset
+# from stp3.datas.CarlaData_2_0 import CarlaDataset
 
 
 def prepare_dataloaders(cfg, return_dataset=False):

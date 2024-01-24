@@ -187,12 +187,16 @@ class STP3(nn.Module):
         """Calculate the (x, y, z) 3D position of the features.
         """
         rotation, translation = extrinsics[..., :3, :3], extrinsics[..., :3, 3]
+        # print("rotation.size():", rotation.size())
+        # print("translation.size():", translation.size())
         B, N, _ = translation.shape
         # Add batch, camera dimension, and a dummy dimension at the end
         points = self.frustum.unsqueeze(0).unsqueeze(0).unsqueeze(-1)
 
         # Camera to ego reference frame
         points = torch.cat((points[:, :, :, :, :, :2] * points[:, :, :, :, :, 2:3], points[:, :, :, :, :, 2:3]), 5)
+        # print("intrinsics.size():", intrinsics.size())
+        # print("torch.inverse(intrinsics).size():", torch.inverse(intrinsics).size())
         combined_transformation = rotation.matmul(torch.inverse(intrinsics))
         points = combined_transformation.view(B, N, 1, 1, 1, 3, 3).matmul(points).squeeze(-1)
         points += translation.view(B, N, 1, 1, 1, 3)
@@ -286,6 +290,10 @@ class STP3(nn.Module):
                 # Convert positions to integer indices
                 geometry_b = (
                         (flow_geo[t] - (self.bev_start_position - self.bev_resolution / 2.0)) / self.bev_resolution)
+                
+                print("geometry_b.size(): ", geometry_b.size())
+                print("N: ", N)
+                
                 geometry_b = geometry_b.view(N, 3).long()
                 geometry_b, x_b = voxel_to_pixel(geometry_b, x_b)
 

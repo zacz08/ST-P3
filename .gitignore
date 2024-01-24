@@ -1,0 +1,13 @@
+# output & ckpts
+output/
+test/
+ckpts/
+ckpts
+models/
+
+# logs and cachs
+tensorboard_logs/
+__pycache__/
+.pyc
+routes_devtest_*/
+imgs/

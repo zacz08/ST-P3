@@ -91,8 +91,10 @@ class MVPAgent(AutonomousAgent):
         self.wall_start = time.time()
         self.initialized = False
 
-        self.input_buffer = {'rgb': deque(maxlen=3), 'rgb_left': deque(maxlen=3), 'rgb_right': deque(maxlen=3),
-                             'rgb_rear': deque(maxlen=3), 'gps': deque(maxlen=3), 'thetas': deque(maxlen=3)}
+        self.input_buffer = {'rgb_front': deque(maxlen=3), 'rgb_front_left': deque(maxlen=3), 
+                             'rgb_front_right': deque(maxlen=3), 'rgb_rear': deque(maxlen=3),
+                             'rgb_rear_left': deque(maxlen=3), 'rgb_rear_right': deque(maxlen=3),
+                             'gps': deque(maxlen=3), 'thetas': deque(maxlen=3)}
 
         trainer = TrainingModule.load_from_checkpoint(checkpoint_path, strict=False)
         trainer.eval()
@@ -142,34 +144,53 @@ class MVPAgent(AutonomousAgent):
         return gps
 
     def sensors(self):
+        cam_config = {
+            'width': 400,
+            'height': 300,
+            'fov': 100
+            }
         return [
             {
                 'type': 'sensor.camera.rgb',
                 'x': 1.3, 'y': 0.0, 'z': 2.3,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
-                'width': 400, 'height': 300, 'fov': 100,
-                'id': 'rgb'
+                'width': cam_config['width'], 'height': cam_config['height'], 'fov': cam_config['fov'],
+                'id': 'rgb_front'
             },
             {
                 'type': 'sensor.camera.rgb',
                 'x': 1.3, 'y': 0.0, 'z': 2.3,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': -60.0,
-                'width': 400, 'height': 300, 'fov': 100,
-                'id': 'rgb_left'
+                'width': cam_config['width'], 'height': cam_config['height'], 'fov': cam_config['fov'],
+                'id': 'rgb_front_left'
             },
             {
                 'type': 'sensor.camera.rgb',
                 'x': 1.3, 'y': 0.0, 'z': 2.3,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 60.0,
-                'width': 400, 'height': 300, 'fov': 100,
-                'id': 'rgb_right'
+                'width': cam_config['width'], 'height': cam_config['height'], 'fov': cam_config['fov'],
+                'id': 'rgb_front_right'
             },
             {
                 'type': 'sensor.camera.rgb',
                 'x': -1.3, 'y': 0.0, 'z': 2.3,
                 'roll': 0.0, 'pitch': 0.0, 'yaw': 180.0,
-                'width': 400, 'height': 300, 'fov': 100,
+                'width': cam_config['width'], 'height': cam_config['height'], 'fov': cam_config['fov'],
                 'id': 'rgb_rear'
+            },
+            {
+                'type': 'sensor.camera.rgb',
+                'x': -1.3, 'y': 0.0, 'z': 2.3,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 120.0,
+                'width': cam_config['width'], 'height': cam_config['height'], 'fov': cam_config['fov'],
+                'id': 'rgb_rear_right'
+            },
+            {
+                'type': 'sensor.camera.rgb',
+                'x': -1.3, 'y': 0.0, 'z': 2.3,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': -120.0,
+                'width': cam_config['width'], 'height': cam_config['height'], 'fov': cam_config['fov'],
+                'id': 'rgb_rear_left'
             },
             {
                 'type': 'sensor.other.imu',
@@ -204,14 +225,19 @@ class MVPAgent(AutonomousAgent):
             return cam_to_ego
 
         cam_front = [1.3, 0.0, 2.3, 0.0, 0.0, 0.0] # x,y,z,roll,pitch, yaw
-        cam_left = [1.3, 0.0, 2.3, 0.0, 0.0, -60.0]
-        cam_right = [1.3, 0.0, 2.3, 0.0, 0.0, 60.0]
+        cam_front_left = [1.3, 0.0, 2.3, 0.0, 0.0, -60.0]
+        cam_front_right = [1.3, 0.0, 2.3, 0.0, 0.0, 60.0]
         cam_rear = [-1.3, 0.0, 2.3, 0.0, 0.0, 180.0]
+        cam_rear_left = [-1.3, 0.0, 2.3, 0.0, 0.0, -120.0]
+        cam_rear_right = [-1.3, 0.0, 2.3, 0.0, 0.0, 120.0]
         front_to_ego = torch.from_numpy(get_cam_to_ego(cam_front)).float().unsqueeze(0)
-        left_to_ego = torch.from_numpy(get_cam_to_ego(cam_left)).float().unsqueeze(0)
-        right_to_ego = torch.from_numpy(get_cam_to_ego(cam_right)).float().unsqueeze(0)
+        front_left_to_ego = torch.from_numpy(get_cam_to_ego(cam_front_left)).float().unsqueeze(0)
+        front_right_to_ego = torch.from_numpy(get_cam_to_ego(cam_front_right)).float().unsqueeze(0)
         rear_to_ego = torch.from_numpy(get_cam_to_ego(cam_rear)).float().unsqueeze(0)
-        extrinsic = torch.cat([front_to_ego, left_to_ego, right_to_ego, rear_to_ego], dim=0)
+        rear_left_to_ego = torch.from_numpy(get_cam_to_ego(cam_rear_left)).float().unsqueeze(0)
+        rear_right_to_ego = torch.from_numpy(get_cam_to_ego(cam_rear_right)).float().unsqueeze(0)
+        extrinsic = torch.cat([front_to_ego, front_left_to_ego, front_right_to_ego,
+                               rear_to_ego, rear_left_to_ego, rear_right_to_ego], dim=0)
 
         sensor_data = {
             'width': 400,
@@ -234,7 +260,8 @@ class MVPAgent(AutonomousAgent):
             scale_width=1,
             scale_height=1
         )
-        intrinsic = intrinsic.unsqueeze(0).expand(4,3,3)
+        # intrinsic = intrinsic.unsqueeze(0).expand(4,3,3)
+        intrinsic = intrinsic.unsqueeze(0).expand(6,3,3)
 
         return extrinsic, intrinsic
 
@@ -331,19 +358,23 @@ class MVPAgent(AutonomousAgent):
     def tick(self, input_data):
         self.step += 1
 
-        rgb = cv2.cvtColor(input_data['rgb'][1][:, :, :3], cv2.COLOR_BGR2RGB)
-        rgb_left = cv2.cvtColor(input_data['rgb_left'][1][:, :, :3], cv2.COLOR_BGR2RGB)
-        rgb_right = cv2.cvtColor(input_data['rgb_right'][1][:, :, :3], cv2.COLOR_BGR2RGB)
+        rgb_front = cv2.cvtColor(input_data['rgb_front'][1][:, :, :3], cv2.COLOR_BGR2RGB)
+        rgb_front_left = cv2.cvtColor(input_data['rgb_front_left'][1][:, :, :3], cv2.COLOR_BGR2RGB)
+        rgb_front_right = cv2.cvtColor(input_data['rgb_front_right'][1][:, :, :3], cv2.COLOR_BGR2RGB)
         rgb_rear = cv2.cvtColor(input_data['rgb_rear'][1][:, :, :3], cv2.COLOR_BGR2RGB)
+        rgb_rear_left = cv2.cvtColor(input_data['rgb_rear_left'][1][:, :, :3], cv2.COLOR_BGR2RGB)
+        rgb_rear_right = cv2.cvtColor(input_data['rgb_rear_right'][1][:, :, :3], cv2.COLOR_BGR2RGB)
         gps = input_data['gps'][1][:2]
         speed = input_data['speed'][1]['speed']
         compass = input_data['imu'][1][-1]
 
         result = {
-            'rgb': rgb,
-            'rgb_left': rgb_left,
-            'rgb_right': rgb_right,
+            'rgb_front': rgb_front,
+            'rgb_front_left': rgb_front_left,
+            'rgb_front_right': rgb_front_right,
             'rgb_rear': rgb_rear,
+            'rgb_rear_left': rgb_rear_left,
+            'rgb_rear_right': rgb_rear_right,
             'gps': gps,
             'speed': speed,
             'compass': compass,
@@ -375,21 +406,29 @@ class MVPAgent(AutonomousAgent):
         tick_data = self.tick(input_data)
 
         if self.step < 4:
-            rgb = self.normalise_image(np.array(
-                scale_and_crop_image(Image.fromarray(tick_data['rgb']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-            self.input_buffer['rgb'].append(rgb.to('cuda', dtype=torch.float32))
+            rgb_front = self.normalise_image(np.array(
+                scale_and_crop_image(Image.fromarray(tick_data['rgb_front']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            self.input_buffer['rgb_front'].append(rgb_front.to('cuda', dtype=torch.float32))
 
-            rgb_left = self.normalise_image(np.array(
-                scale_and_crop_image(Image.fromarray(tick_data['rgb_left']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-            self.input_buffer['rgb_left'].append(rgb_left.to('cuda', dtype=torch.float32))
+            rgb_front_left = self.normalise_image(np.array(
+                scale_and_crop_image(Image.fromarray(tick_data['rgb_front_left']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            self.input_buffer['rgb_front_left'].append(rgb_front_left.to('cuda', dtype=torch.float32))
 
-            rgb_right = self.normalise_image(np.array(
-                scale_and_crop_image(Image.fromarray(tick_data['rgb_right']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-            self.input_buffer['rgb_right'].append(rgb_right.to('cuda', dtype=torch.float32))
+            rgb_front_right = self.normalise_image(np.array(
+                scale_and_crop_image(Image.fromarray(tick_data['rgb_front_right']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            self.input_buffer['rgb_front_right'].append(rgb_front_right.to('cuda', dtype=torch.float32))
 
             rgb_rear = self.normalise_image(np.array(
                 scale_and_crop_image(Image.fromarray(tick_data['rgb_rear']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
             self.input_buffer['rgb_rear'].append(rgb_rear.to('cuda', dtype=torch.float32))
+
+            rgb_rear_left = self.normalise_image(np.array(
+                scale_and_crop_image(Image.fromarray(tick_data['rgb_rear_left']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            self.input_buffer['rgb_rear_left'].append(rgb_rear_left.to('cuda', dtype=torch.float32))
+
+            rgb_rear_right = self.normalise_image(np.array(
+                scale_and_crop_image(Image.fromarray(tick_data['rgb_rear_right']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            self.input_buffer['rgb_rear_right'].append(rgb_rear_right.to('cuda', dtype=torch.float32))
 
             self.input_buffer['thetas'].append(tick_data['compass'])
             self.input_buffer['gps'].append(tick_data['gps'])
@@ -414,33 +453,45 @@ class MVPAgent(AutonomousAgent):
         target_points = tick_data['target_point'].to('cuda', dtype=torch.float32).unsqueeze(0)
 
         images = []
-        rgb = self.normalise_image(np.array(
-            scale_and_crop_image(Image.fromarray(tick_data['rgb']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-        self.input_buffer['rgb'].append(rgb.to('cuda', dtype=torch.float32))
-        images.append(torch.cat([p for p in self.input_buffer['rgb']], dim=1))
+        rgb_front = self.normalise_image(np.array(
+            scale_and_crop_image(Image.fromarray(tick_data['rgb_front']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+        self.input_buffer['rgb_front'].append(rgb_front.to('cuda', dtype=torch.float32))
+        images.append(torch.cat([p for p in self.input_buffer['rgb_front']], dim=1))
 
-        rgb_left = self.normalise_image(np.array(
-            scale_and_crop_image(Image.fromarray(tick_data['rgb_left']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-        self.input_buffer['rgb_left'].append(rgb_left.to('cuda', dtype=torch.float32))
-        images.append(torch.cat([p for p in self.input_buffer['rgb_left']], dim=1))
+        rgb_front_left = self.normalise_image(np.array(
+            scale_and_crop_image(Image.fromarray(tick_data['rgb_front_left']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+        self.input_buffer['rgb_front_left'].append(rgb_front_left.to('cuda', dtype=torch.float32))
+        images.append(torch.cat([p for p in self.input_buffer['rgb_front_left']], dim=1))
 
-        rgb_right = self.normalise_image(np.array(
-            scale_and_crop_image(Image.fromarray(tick_data['rgb_right']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-        self.input_buffer['rgb_right'].append(rgb_right.to('cuda', dtype=torch.float32))
-        images.append(torch.cat([p for p in self.input_buffer['rgb_right']], dim=1))
+        rgb_front_right = self.normalise_image(np.array(
+            scale_and_crop_image(Image.fromarray(tick_data['rgb_front_right']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+        self.input_buffer['rgb_front_right'].append(rgb_front_right.to('cuda', dtype=torch.float32))
+        images.append(torch.cat([p for p in self.input_buffer['rgb_front_right']], dim=1))
 
         rgb_rear = self.normalise_image(np.array(
             scale_and_crop_image(Image.fromarray(tick_data['rgb_rear']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
         self.input_buffer['rgb_rear'].append(rgb_rear.to('cuda', dtype=torch.float32))
         images.append(torch.cat([p for p in self.input_buffer['rgb_rear']], dim=1))
 
+        rgb_rear_left = self.normalise_image(np.array(
+            scale_and_crop_image(Image.fromarray(tick_data['rgb_rear_left']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+        self.input_buffer['rgb_rear_left'].append(rgb_rear_left.to('cuda', dtype=torch.float32))
+        images.append(torch.cat([p for p in self.input_buffer['rgb_rear_left']], dim=1))
+
+        rgb_rear_right = self.normalise_image(np.array(
+            scale_and_crop_image(Image.fromarray(tick_data['rgb_rear_right']), scale=1, crop=256))).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+        self.input_buffer['rgb_rear_right'].append(rgb_rear_right.to('cuda', dtype=torch.float32))
+        images.append(torch.cat([p for p in self.input_buffer['rgb_rear_right']], dim=1))
+
         self.input_buffer['thetas'].append(tick_data['compass'])
         self.input_buffer['gps'].append(tick_data['gps'])
 
         images = torch.cat(images, dim=2).to('cuda', dtype=torch.float32) # (1,3,4,256,256)
         extrinsics, intrinsics = self.get_cam_para()
-        extrinsics = extrinsics.unsqueeze(0).expand(3,4,4,4).unsqueeze(0).to('cuda', dtype=torch.float32)
-        intrinsics = intrinsics.unsqueeze(0).expand(3,4,3,3).unsqueeze(0).to('cuda', dtype=torch.float32)
+        # modified expand(3,4,4,4) to expand(3,6,4,4)
+        extrinsics = extrinsics.unsqueeze(0).expand(3,6,4,4).unsqueeze(0).to('cuda', dtype=torch.float32)
+        # modified expand(3,4,3,3) to expand(3,6,3,3)
+        intrinsics = intrinsics.unsqueeze(0).expand(3,6,3,3).unsqueeze(0).to('cuda', dtype=torch.float32)
         future_egomotion = self.get_future_egomotion(
             seq_x=[p[0] for p in self.input_buffer['gps']],
             seq_y=[p[1] for p in self.input_buffer['gps']],
@@ -506,22 +557,32 @@ class MVPAgent(AutonomousAgent):
 
         plt.subplot(gs[0,0])
         plt.annotate('FRONT_LEFT', (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
-        plt.imshow(tick_data['rgb_left'])
+        plt.imshow(tick_data['rgb_front_left'])
         plt.axis('off')
 
         plt.subplot(gs[0,1])
         plt.annotate('FRONT', (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
-        plt.imshow(tick_data['rgb'])
+        plt.imshow(tick_data['rgb_front'])
         plt.axis('off')
 
         plt.subplot(gs[0,2])
         plt.annotate('FRONT_RIGHT', (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
-        plt.imshow(tick_data['rgb_right'])
+        plt.imshow(tick_data['rgb_front_right'])
+        plt.axis('off')
+
+        plt.subplot(gs[1,0])
+        plt.annotate('BACK_LEFT', (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
+        plt.imshow(tick_data['rgb_rear_left'])
         plt.axis('off')
 
         plt.subplot(gs[1,1])
         plt.annotate('BACK', (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
         plt.imshow(tick_data['rgb_rear'])
+        plt.axis('off')
+
+        plt.subplot(gs[1,2])
+        plt.annotate('BACK_RIGHT', (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
+        plt.imshow(tick_data['rgb_rear_right'])
         plt.axis('off')
 
         plt.subplot(gs[0, 3])
