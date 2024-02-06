@@ -19,6 +19,9 @@ import numpy as np
 from PIL import Image
 from pyquaternion import Quaternion
 
+from stp3.trainer import TrainingModule
+# from stp3.datas.CarlaData import scale_and_crop_image
+from stp3.datas.CarlaData_2_0 import scale_and_crop_image
 from stp3.utils.geometry import (
     update_intrinsics,
     mat2pose_vec,
@@ -30,8 +33,6 @@ from leaderboard.autoagents.autonomous_agent import AutonomousAgent
 from leaderboard.autoagents.autonomous_agent import Track
 # from team_code.planner import RoutePlanner
 from team_code_autopilot.planner import RoutePlanner
-from stp3.trainer import TrainingModule
-from stp3.datas.CarlaData import scale_and_crop_image
 
 SAVE_PATH = os.environ.get('SAVE_PATH', None)
 
@@ -106,9 +107,9 @@ class MVPAgent(AutonomousAgent):
         if SAVE_PATH is not None:
             now = datetime.datetime.now()
             string = pathlib.Path(os.environ['ROUTES']).stem + '_'
-            string += '_'.join(map(lambda x: '%02d' % x, (now.month, now.day, now.hour, now.minute, now.second)))
+            string += '_'.join(map(lambda x: '%02d' % x, (now.year, now.month, now.day, now.hour, now.minute, now.second)))
 
-            print(string)
+            print("Test result saved to file:", string)
 
             self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
             self.save_path.mkdir(parents=True, exist_ok=False)
@@ -240,9 +241,12 @@ class MVPAgent(AutonomousAgent):
                                rear_to_ego, rear_left_to_ego, rear_right_to_ego], dim=0)
 
         sensor_data = {
-            'width': 400,
-            'height': 300,
-            'fov': 100
+            # 'width': 400,
+            # 'height': 300,
+            # 'fov': 100
+            'width': 1600,
+            'height': 900,
+            'fov': 70
         }
         w = sensor_data['width']
         h = sensor_data['height']
@@ -260,8 +264,8 @@ class MVPAgent(AutonomousAgent):
             scale_width=1,
             scale_height=1
         )
-        # intrinsic = intrinsic.unsqueeze(0).expand(4,3,3)
         intrinsic = intrinsic.unsqueeze(0).expand(6,3,3)
+        # intrinsic = intrinsic.unsqueeze(0).expand(6,3,3)
 
         return extrinsic, intrinsic
 
@@ -532,7 +536,7 @@ class MVPAgent(AutonomousAgent):
         control.steer = float(steer)
         control.throttle = float(throttle)
         control.brake = float(brake)
-        print("steer:{}, acc:{}, brake:{}".format(control.steer,control.throttle,control.brake))
+        # print("steer:{}, acc:{}, brake:{}".format(control.steer,control.throttle,control.brake))
 
         if SAVE_PATH is not None and self.step % 10 == 0:
             self.save(tick_data, output, final_traj.detach())
@@ -599,11 +603,11 @@ class MVPAgent(AutonomousAgent):
         showing = torch.zeros((200, 200, 3)).numpy()
         area = torch.argmax(hdmap[0,2:4], dim=0).cpu().numpy()
         hdmap_index = area > 0
-        showing[hdmap_index] = np.array([41/255, 255/255, 0/255])
+        showing[hdmap_index] = np.array([100/255, 100/255, 100/255])    # drivable area
 
         area = torch.argmax(hdmap[0,0:2], dim=0).cpu().numpy()
         hdmap_index = area > 0
-        showing[hdmap_index] = np.array([83/255, 55/255, 122/255])
+        showing[hdmap_index] = np.array([255/255, 255/255, 255/255])    # road line
 
         semantic_seg = torch.argmax(segmentation[0], dim=0).cpu().numpy()
         semantic_index = semantic_seg > 0
@@ -635,8 +639,12 @@ class MVPAgent(AutonomousAgent):
         trajs = (trajs[0,:,:2].cpu().numpy() - bx) / dx
         plt.plot(trajs[:, 0], trajs[:, 1])
 
-        plt.annotate('COMMAND:' + str(tick_data['next_command']), (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
-        plt.annotate('TARGET_POINT: ({},{})'.format(tick_data['target_point'][0].item(), tick_data['target_point'][1].item()), (0.01, 0.67), c='white', xycoords='axes fraction', fontsize=14 )
+        plt.annotate('COMMAND:' + str(tick_data['next_command']), 
+                     (0.01, 0.87), c='white', xycoords='axes fraction', fontsize=14)
+        plt.annotate('TARGET_POINT: ({:.3f},{:.3f})'.format(tick_data['target_point'][0].item(), 
+                                                            tick_data['target_point'][1].item()), 
+                                                            (0.01, 0.67), c='white', xycoords='axes fraction', 
+                                                            fontsize=14 )
 
         plt.savefig(self.save_path / 'show' / ('%04d.png' % frame))
         plt.close()
