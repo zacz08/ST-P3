@@ -431,6 +431,18 @@ class CarlaDataset(torch.utils.data.Dataset):
 
 
 
+# def scale_and_crop_image(image, scale=1., crop=256):
+#     """
+#     Scale and crop a PIL image, returning a channels-first numpy array.
+#     """
+#     (width, height) = (int(image.width // scale), int(image.height // scale))
+#     im_resized = image.resize((width, height))
+#     image = np.asarray(im_resized)
+#     start_x = height//2 - crop//2
+#     start_y = width//2 - crop//2
+#     cropped_image = image[start_x:start_x+crop, start_y:start_y+crop]
+#     return cropped_image
+    
 def scale_and_crop_image(image, scale=1., crop=256):
     """
     Scale and crop a PIL image, returning a channels-first numpy array.
@@ -438,9 +450,14 @@ def scale_and_crop_image(image, scale=1., crop=256):
     (width, height) = (int(image.width // scale), int(image.height // scale))
     im_resized = image.resize((width, height))
     image = np.asarray(im_resized)
-    start_x = height//2 - crop//2
-    start_y = width//2 - crop//2
-    cropped_image = image[start_x:start_x+crop, start_y:start_y+crop]
+    if isinstance(crop, tuple):
+        start_x = height//2 - crop[0]//2
+        start_y = width//2 - crop[1]//2
+        cropped_image = image[start_x:start_x+crop[0], start_y:start_y+crop[1]]
+    else:
+        start_x = height//2 - crop//2
+        start_y = width//2 - crop//2
+        cropped_image = image[start_x:start_x+crop, start_y:start_y+crop]
     return cropped_image
 
 
