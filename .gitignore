@@ -4,6 +4,7 @@ test/
 ckpts/
 ckpts
 models/
+results/
 
 # logs and cachs
 tensorboard_logs/
