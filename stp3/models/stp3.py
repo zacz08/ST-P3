@@ -109,18 +109,21 @@ class STP3(nn.Module):
         set_bn_momentum(self, self.cfg.MODEL.BN_MOMENTUM)
 
     def create_frustum(self):
-        # Create grid in image plane
+        ## Create grid in image plane
+        # image size after date augmentation
         h, w = self.cfg.IMAGE.FINAL_DIM
         downsampled_h, downsampled_w = h // self.encoder_downsample, w // self.encoder_downsample
 
-        # Depth grid
+        # Create grid in depth direction
         depth_grid = torch.arange(*self.cfg.LIFT.D_BOUND, dtype=torch.float)
         depth_grid = depth_grid.view(-1, 1, 1).expand(-1, downsampled_h, downsampled_w)
         n_depth_slices = depth_grid.shape[0]
 
-        # x and y grids
+        ## x and y grids
+        # create gird in x direction
         x_grid = torch.linspace(0, w - 1, downsampled_w, dtype=torch.float)
         x_grid = x_grid.view(1, 1, downsampled_w).expand(n_depth_slices, downsampled_h, downsampled_w)
+        # create gird in y direction
         y_grid = torch.linspace(0, h - 1, downsampled_h, dtype=torch.float)
         y_grid = y_grid.view(1, downsampled_h, 1).expand(n_depth_slices, downsampled_h, downsampled_w)
 
@@ -187,22 +190,19 @@ class STP3(nn.Module):
         """Calculate the (x, y, z) 3D position of the features.
         """
         rotation, translation = extrinsics[..., :3, :3], extrinsics[..., :3, 3]
-        # print("rotation.size():", rotation.size())
-        # print("translation.size():", translation.size())
-        B, N, _ = translation.shape
+        B, N, _ = translation.shape     # B:batch size, N: camera number
+
         # Add batch, camera dimension, and a dummy dimension at the end
         points = self.frustum.unsqueeze(0).unsqueeze(0).unsqueeze(-1)
 
-        # Camera to ego reference frame
+        # Camera coordinate to ego reference frame coordinate
         points = torch.cat((points[:, :, :, :, :, :2] * points[:, :, :, :, :, 2:3], points[:, :, :, :, :, 2:3]), 5)
-        # print("intrinsics.size():", intrinsics.size())
-        # print("torch.inverse(intrinsics).size():", torch.inverse(intrinsics).size())
         combined_transformation = rotation.matmul(torch.inverse(intrinsics))
         points = combined_transformation.view(B, N, 1, 1, 1, 3, 3).matmul(points).squeeze(-1)
         points += translation.view(B, N, 1, 1, 1, 3)
 
         # The 3 dimensions in the ego reference frame are: (forward, sides, height)
-        return points
+        return points   # B*N*D*H*W*3
 
     def encoder_forward(self, x, cam_front_index=1):
         # batch, n_cameras, channels, height, width
@@ -290,10 +290,6 @@ class STP3(nn.Module):
                 # Convert positions to integer indices
                 geometry_b = (
                         (flow_geo[t] - (self.bev_start_position - self.bev_resolution / 2.0)) / self.bev_resolution)
-                
-                print("geometry_b.size(): ", geometry_b.size())
-                print("N: ", N)
-                
                 geometry_b = geometry_b.view(N, 3).long()
                 geometry_b, x_b = voxel_to_pixel(geometry_b, x_b)
 
