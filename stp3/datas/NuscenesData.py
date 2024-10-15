@@ -644,4 +644,5 @@ class FuturePredictionDataset(torch.utils.data.Dataset):
         data['centerness'] = instance_centerness
         data['offset'] = instance_offset
         data['flow'] = instance_flow
+        data['bev_token'] = rec['token']
         return data
