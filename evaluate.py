@@ -265,7 +265,7 @@ def save_bev(output, labels, batch, n_present, frame, bev_token, save_path_pred)
     plt.close()
 
     save_path_pred = os.path.join(save_path_pred, f'{frame:05d}_bev_pred_{bev_token}.jpg')
-    cv2.imwrite(save_path_pred, cv2.cvtColor(flipped_img, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(save_path_pred, cv2.cvtColor(cv2.resize(flipped_img, (512, 512)), cv2.COLOR_RGB2BGR))
     
 
 def save(output, labels, batch, n_present, frame, save_path):
