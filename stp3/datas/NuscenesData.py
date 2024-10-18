@@ -113,8 +113,12 @@ class FuturePredictionDataset(torch.utils.data.Dataset):
     def prepro(self):
         samples = [samp for samp in self.nusc.sample]
 
-        # remove samples that aren't in this split
-        samples = [samp for samp in samples if self.nusc.get('scene', samp['scene_token'])['name'] in self.scenes]
+        if self.mode in ['train', 'val']:
+            # remove samples that aren't in this split
+            samples = [samp for samp in samples if self.nusc.get('scene', samp['scene_token'])['name'] in self.scenes]
+        elif self.mode == 'test':
+            self.nusc = NuScenes(version='v1.0-test', dataroot=self.dataroot, verbose=False)
+            samples = [samp for samp in self.nusc.sample]
 
         # sort by scene, timestamp (only to make chronological viz easier)
         samples.sort(key=lambda x: (x['scene_token'], x['timestamp']))
@@ -590,7 +594,7 @@ class FuturePredictionDataset(torch.utils.data.Dataset):
         data = {}
         keys = ['image', 'intrinsics', 'extrinsics', 'depths',
                 'segmentation', 'instance', 'centerness', 'offset', 'flow', 'pedestrian',
-                'future_egomotion', 'hdmap', 'gt_trajectory', 'indices',
+                'future_egomotion', 'hdmap', 'gt_trajectory', 'indices', 'bev_token',
                 ]
         for key in keys:
             data[key] = []
@@ -603,6 +607,7 @@ class FuturePredictionDataset(torch.utils.data.Dataset):
             else:
                 in_pred = False
             rec = self.ixes[index_t]
+            data['bev_token'].append(rec['token'])
 
             if i < self.receptive_field:
                 images, intrinsics, extrinsics, depths = self.get_input_data(rec)
@@ -644,5 +649,4 @@ class FuturePredictionDataset(torch.utils.data.Dataset):
         data['centerness'] = instance_centerness
         data['offset'] = instance_offset
         data['flow'] = instance_flow
-        data['bev_token'] = rec['token']
         return data
