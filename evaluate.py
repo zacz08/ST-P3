@@ -30,7 +30,7 @@ def mk_save_dir():
 
 def eval(checkpoint_path, dataroot):
     # save_folder_pred = mk_save_dir()
-    folder_name = 'train_mini'
+    folder_name = 'train'
     save_folder_pred = os.path.join(dataroot, 'bev_pred_stp3', folder_name)
     if not os.path.exists(save_folder_pred):
             os.makedirs(save_folder_pred)
@@ -48,6 +48,7 @@ def eval(checkpoint_path, dataroot):
     model = trainer.model
 
     cfg = model.cfg
+    cfg.PLANNING.ENABLED = False
     cfg.GPUS = "[0]"
     cfg.BATCHSIZE = 1
     cfg.LIFT.GT_DEPTH = False
@@ -56,8 +57,8 @@ def eval(checkpoint_path, dataroot):
 
     dataroot = cfg.DATASET.DATAROOT
     nworkers = cfg.N_WORKERS
-    # nusc = NuScenes(version='v1.0-{}'.format(cfg.DATASET.VERSION), dataroot=dataroot, verbose=False)
-    nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=False)
+    nusc = NuScenes(version='v1.0-{}'.format(cfg.DATASET.VERSION), dataroot=dataroot, verbose=False)
+    # nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=False)
     valdata = FuturePredictionDataset(nusc, 0, cfg)
     valloader = torch.utils.data.DataLoader(
         valdata, batch_size=cfg.BATCHSIZE, shuffle=False, num_workers=nworkers, pin_memory=True, drop_last=False
@@ -94,7 +95,7 @@ def eval(checkpoint_path, dataroot):
             command = batch['command']
             trajs = batch['sample_trajectory']
             target_points = batch['target_point']
-            bev_token = batch['bev_token'][0]
+            bev_token = batch['bev_token'][2][0]
             B = len(image)
             labels = trainer.prepare_future_labels(batch)
 
