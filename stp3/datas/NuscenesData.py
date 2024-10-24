@@ -1,5 +1,7 @@
 import os
 from PIL import Image
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import numpy as np
 import cv2
@@ -239,7 +241,12 @@ class FuturePredictionDataset(torch.utils.data.Dataset):
 
             # Load image
             image_filename = os.path.join(self.dataroot, camera_sample['filename'])
-            img = Image.open(image_filename)
+            # img = Image.open(image_filename)
+            try:
+                img = Image.open(image_filename)
+            except OSError as e:
+                print(f"Error processing image {image_filename}: {e}")
+                img = Image.new('RGB', self.augmentation_parameters['resize_dims'], (0, 0, 0))
             # Resize and crop
             img = resize_and_crop_image(
                 img, resize_dims=self.augmentation_parameters['resize_dims'], crop=self.augmentation_parameters['crop']
