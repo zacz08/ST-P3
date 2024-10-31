@@ -28,12 +28,17 @@ def mk_save_dir():
     save_path.mkdir(parents=True, exist_ok=False)
     return save_path
 
-def eval(checkpoint_path, dataroot):
+def eval(checkpoint_path, dataroot, mode):
     # save_folder_pred = mk_save_dir()
-    folder_name = 'train'
+    folder_name = 'train_mini'
     save_folder_pred = os.path.join(dataroot, 'bev_pred_stp3', folder_name)
     if not os.path.exists(save_folder_pred):
             os.makedirs(save_folder_pred)
+
+    if mode == 'return_bev':
+        save_folder_bevfeat = os.path.join(dataroot, 'bev_feat_stp3', folder_name)
+        if not os.path.exists(save_folder_bevfeat):
+            os.makedirs(save_folder_bevfeat)
 
     bev_seg_gt_folder = os.path.join(dataroot, 'bev_seg_gt_stp3', folder_name)
     json_name = 'prompt_stp3_' + folder_name + '.json'
@@ -57,8 +62,8 @@ def eval(checkpoint_path, dataroot):
 
     dataroot = cfg.DATASET.DATAROOT
     nworkers = cfg.N_WORKERS
-    nusc = NuScenes(version='v1.0-{}'.format(cfg.DATASET.VERSION), dataroot=dataroot, verbose=False)
-    # nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=False)
+    # nusc = NuScenes(version='v1.0-{}'.format(cfg.DATASET.VERSION), dataroot=dataroot, verbose=False)
+    nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=False)
     valdata = FuturePredictionDataset(nusc, 0, cfg)
     valloader = torch.utils.data.DataLoader(
         valdata, batch_size=cfg.BATCHSIZE, shuffle=False, num_workers=nworkers, pin_memory=True, drop_last=False
@@ -80,10 +85,10 @@ def eval(checkpoint_path, dataroot):
     if cfg.INSTANCE_SEG.ENABLED:
         metric_panoptic_val = PanopticMetric(n_classes=n_classes).to(device)
 
-    if cfg.PLANNING.ENABLED:
-        metric_planning_val = []
-        for i in range(future_second):
-            metric_planning_val.append(PlanningMetric(cfg, 2*(i+1)).to(device))
+    # if cfg.PLANNING.ENABLED:
+    #     metric_planning_val = []
+    #     for i in range(future_second):
+    #         metric_planning_val.append(PlanningMetric(cfg, 2*(i+1)).to(device))
 
     with open(json_path, 'w') as json_file:
         for index, batch in enumerate(tqdm(valloader)):
@@ -100,73 +105,73 @@ def eval(checkpoint_path, dataroot):
             labels = trainer.prepare_future_labels(batch)
 
             with torch.no_grad():
-                output = model(
-                    image, intrinsics, extrinsics, future_egomotion
+                output, bev_feat = model(
+                    image, intrinsics, extrinsics, future_egomotion, mode
                 )
+            bev_feat_name = f"{index:05d}_bev_feat_{bev_token}.pt"
+            save_path = os.path.join(save_folder_bevfeat, bev_feat_name)
+            torch.save(bev_feat, save_path)
 
             n_present = model.receptive_field
 
-            # semantic segmentation metric
-            seg_prediction = output['segmentation'].detach()
-            seg_prediction = torch.argmax(seg_prediction, dim=2, keepdim=True)
-            metric_vehicle_val(seg_prediction[:, n_present - 1:], labels['segmentation'][:, n_present - 1:])
+            # # semantic segmentation metric
+            # seg_prediction = output['segmentation'].detach()
+            # seg_prediction = torch.argmax(seg_prediction, dim=2, keepdim=True)
+            # metric_vehicle_val(seg_prediction[:, n_present - 1:], labels['segmentation'][:, n_present - 1:])
 
-            if cfg.SEMANTIC_SEG.PEDESTRIAN.ENABLED:
-                pedestrian_prediction = output['pedestrian'].detach()
-                pedestrian_prediction = torch.argmax(pedestrian_prediction, dim=2, keepdim=True)
-                metric_pedestrian_val(pedestrian_prediction[:, n_present - 1:],
-                                        labels['pedestrian'][:, n_present - 1:])
-            else:
-                pedestrian_prediction = torch.zeros_like(seg_prediction)
+            # if cfg.SEMANTIC_SEG.PEDESTRIAN.ENABLED:
+            #     pedestrian_prediction = output['pedestrian'].detach()
+            #     pedestrian_prediction = torch.argmax(pedestrian_prediction, dim=2, keepdim=True)
+            #     metric_pedestrian_val(pedestrian_prediction[:, n_present - 1:],
+            #                             labels['pedestrian'][:, n_present - 1:])
+            # else:
+            #     pedestrian_prediction = torch.zeros_like(seg_prediction)
 
-            if cfg.SEMANTIC_SEG.HDMAP.ENABLED:
-                for i in range(len(hdmap_class)):
-                    hdmap_prediction = output['hdmap'][:, 2 * i:2 * (i + 1)].detach()
-                    hdmap_prediction = torch.argmax(hdmap_prediction, dim=1, keepdim=True)
-                    metric_hdmap_val[i](hdmap_prediction, labels['hdmap'][:, i:i + 1])
+            # if cfg.SEMANTIC_SEG.HDMAP.ENABLED:
+            #     for i in range(len(hdmap_class)):
+            #         hdmap_prediction = output['hdmap'][:, 2 * i:2 * (i + 1)].detach()
+            #         hdmap_prediction = torch.argmax(hdmap_prediction, dim=1, keepdim=True)
+            #         metric_hdmap_val[i](hdmap_prediction, labels['hdmap'][:, i:i + 1])
 
-            if cfg.INSTANCE_SEG.ENABLED:
-                pred_consistent_instance_seg = predict_instance_segmentation_and_trajectories(
-                    output, compute_matched_centers=False, make_consistent=True
-                )
-                metric_panoptic_val(pred_consistent_instance_seg[:, n_present - 1:],
-                                        labels['instance'][:, n_present - 1:])
+            # if cfg.INSTANCE_SEG.ENABLED:
+            #     pred_consistent_instance_seg = predict_instance_segmentation_and_trajectories(
+            #         output, compute_matched_centers=False, make_consistent=True
+            #     )
+            #     metric_panoptic_val(pred_consistent_instance_seg[:, n_present - 1:],
+            #                             labels['instance'][:, n_present - 1:])
 
-            if cfg.PLANNING.ENABLED:
-                occupancy = torch.logical_or(seg_prediction, pedestrian_prediction)
-                _, final_traj = model.planning(
-                    cam_front=output['cam_front'].detach(),
-                    trajs=trajs[:, :, 1:],
-                    gt_trajs=labels['gt_trajectory'][:, 1:],
-                    cost_volume=output['costvolume'][:, n_present:].detach(),
-                    semantic_pred=occupancy[:, n_present:].squeeze(2),
-                    hd_map=output['hdmap'].detach(),
-                    commands=command,
-                    target_points=target_points
-                )
-                occupancy = torch.logical_or(labels['segmentation'][:, n_present:].squeeze(2),
-                                            labels['pedestrian'][:, n_present:].squeeze(2))
-                for i in range(future_second):
-                    cur_time = (i+1)*2
-                    metric_planning_val[i](final_traj[:,:cur_time].detach(), labels['gt_trajectory'][:,1:cur_time+1], occupancy[:,:cur_time])
+            # if cfg.PLANNING.ENABLED:
+            #     occupancy = torch.logical_or(seg_prediction, pedestrian_prediction)
+            #     _, final_traj = model.planning(
+            #         cam_front=output['cam_front'].detach(),
+            #         trajs=trajs[:, :, 1:],
+            #         gt_trajs=labels['gt_trajectory'][:, 1:],
+            #         cost_volume=output['costvolume'][:, n_present:].detach(),
+            #         semantic_pred=occupancy[:, n_present:].squeeze(2),
+            #         hd_map=output['hdmap'].detach(),
+            #         commands=command,
+            #         target_points=target_points
+            #     )
+            #     occupancy = torch.logical_or(labels['segmentation'][:, n_present:].squeeze(2),
+            #                                 labels['pedestrian'][:, n_present:].squeeze(2))
+            #     for i in range(future_second):
+            #         cur_time = (i+1)*2
+            #         metric_planning_val[i](final_traj[:,:cur_time].detach(), labels['gt_trajectory'][:,1:cur_time+1], occupancy[:,:cur_time])
 
             save_bev(output, labels, batch, n_present, index, bev_token, save_folder_pred)
-            
-            # if index % 100 == 0:
-            #     save(output, labels, batch, n_present, index, save_path)
 
             # write data to json file
             gt_save_path = get_seg_map_name_by_sample_token(
                 bev_seg_gt_folder,
                 bev_token)
             assert gt_save_path is not None, f"Can't find bev gt image with sample_token: {bev_token}"
-            pred_save_path = f"{index:05d}_bev_pred_{bev_token}.jpg"
+            pred_seg_map_path = f"{index:05d}_bev_pred_{bev_token}.jpg"
             prompt = "bird's-eye-view semantic segmentation map"
 
             data = {
-                "source": pred_save_path,
-                "target": gt_save_path,
-                "prompt": prompt
+                "bev_feat": bev_feat_name,
+                "pred_map": pred_seg_map_path,
+                "bev_map_gt": gt_save_path
             }
 
             # 使用 json.dump 写入文件并换行
@@ -174,33 +179,33 @@ def eval(checkpoint_path, dataroot):
             json_file.write('\n')  # 每行一个JSON对象
 
 
-    results = {}
+    # results = {}
 
-    scores = metric_vehicle_val.compute()
-    results['vehicle_iou'] = scores[1]
+    # scores = metric_vehicle_val.compute()
+    # results['vehicle_iou'] = scores[1]
 
-    if cfg.SEMANTIC_SEG.PEDESTRIAN.ENABLED:
-        scores = metric_pedestrian_val.compute()
-        results['pedestrian_iou'] = scores[1]
+    # if cfg.SEMANTIC_SEG.PEDESTRIAN.ENABLED:
+    #     scores = metric_pedestrian_val.compute()
+    #     results['pedestrian_iou'] = scores[1]
 
-    if cfg.SEMANTIC_SEG.HDMAP.ENABLED:
-        for i, name in enumerate(hdmap_class):
-            scores = metric_hdmap_val[i].compute()
-            results[name + '_iou'] = scores[1]
+    # if cfg.SEMANTIC_SEG.HDMAP.ENABLED:
+    #     for i, name in enumerate(hdmap_class):
+    #         scores = metric_hdmap_val[i].compute()
+    #         results[name + '_iou'] = scores[1]
 
-    if cfg.INSTANCE_SEG.ENABLED:
-        scores = metric_panoptic_val.compute()
-        for key, value in scores.items():
-            results['vehicle_'+key] = value[1]
+    # if cfg.INSTANCE_SEG.ENABLED:
+    #     scores = metric_panoptic_val.compute()
+    #     for key, value in scores.items():
+    #         results['vehicle_'+key] = value[1]
 
-    if cfg.PLANNING.ENABLED:
-        for i in range(future_second):
-            scores = metric_planning_val[i].compute()
-            for key, value in scores.items():
-                results['plan_'+key+'_{}s'.format(i+1)]=value.mean()
+    # if cfg.PLANNING.ENABLED:
+    #     for i in range(future_second):
+    #         scores = metric_planning_val[i].compute()
+    #         for key, value in scores.items():
+    #             results['plan_'+key+'_{}s'.format(i+1)]=value.mean()
 
-    for key, value in results.items():
-        print(f'{key} : {value.item()}')
+    # for key, value in results.items():
+    #     print(f'{key} : {value.item()}')
 
 
 def save_bev(output, labels, batch, n_present, frame, bev_token, save_path_pred):
@@ -394,4 +399,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    eval(args.checkpoint, args.dataroot)
+    eval(checkpoint_path=args.checkpoint, 
+         dataroot=args.dataroot,
+         mode='return_bev')

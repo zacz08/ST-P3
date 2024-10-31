@@ -132,7 +132,7 @@ class STP3(nn.Module):
         frustum = torch.stack((x_grid, y_grid, depth_grid), -1)
         return nn.Parameter(frustum, requires_grad=False)
 
-    def forward(self, image, intrinsics, extrinsics, future_egomotion):
+    def forward(self, image, intrinsics, extrinsics, future_egomotion, mode='trainval'):
         output = {}
 
         # Only process features from the past and present
@@ -152,10 +152,15 @@ class STP3(nn.Module):
             # at time 0, no egomotion so feed zero vector
             future_egomotions_spatial = torch.cat([torch.zeros_like(future_egomotions_spatial[:, :1]),
                                                    future_egomotions_spatial[:, :(self.receptive_field-1)]], dim=1)
-            x = torch.cat([x, future_egomotions_spatial], dim=-3)
+            x = torch.cat([x, future_egomotions_spatial], dim=-3)   # (1,3,70,200,200)
 
         #  Temporal model
-        states = self.temporal_model(x)
+        states = self.temporal_model(x) # (1,3,64,200,200)
+
+        if mode == 'return_bev':
+            # return the bev features that are not decoded
+            bev_feat = states.contiguous().view(1, 3 * 64, 200, 200) # (1, 192, 200, 200)
+            bev_feat = bev_feat.half()
 
         if self.n_future > 0:
             present_state = states[:, -1:].contiguous()
@@ -173,7 +178,7 @@ class STP3(nn.Module):
                 future_prediction_input = present_state.new_zeros(b, 1, self.latent_dim, h, w)
 
             # predict the future
-            states = self.future_prediction(future_prediction_input, states)
+            states = self.future_prediction(future_prediction_input, states)    # (1, 9, 64, 200, 200)
 
             # predict BEV outputs
             bev_output = self.decoder(states)
@@ -184,7 +189,10 @@ class STP3(nn.Module):
 
         output = {**output, **bev_output}
 
-        return output
+        if mode == 'return_bev':
+            return output, bev_feat
+        else:
+            return output
 
     def get_geometry(self, intrinsics, extrinsics):
         """Calculate the (x, y, z) 3D position of the features.
