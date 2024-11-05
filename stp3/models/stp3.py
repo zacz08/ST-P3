@@ -36,7 +36,8 @@ class STP3(nn.Module):
 
         # temporal block
         self.receptive_field = self.cfg.TIME_RECEPTIVE_FIELD
-        self.n_future = self.cfg.N_FUTURE_FRAMES
+        # self.n_future = self.cfg.N_FUTURE_FRAMES
+        self.n_future = 1
         self.latent_dim = self.cfg.MODEL.DISTRIBUTION.LATENT_DIM
 
         # Spatial extent in bird's-eye view, in meters
@@ -157,11 +158,6 @@ class STP3(nn.Module):
         #  Temporal model
         states = self.temporal_model(x) # (1,3,64,200,200)
 
-        if mode == 'return_bev':
-            # return the bev features that are not decoded
-            bev_feat = states.contiguous().view(1, 3 * 64, 200, 200) # (1, 192, 200, 200)
-            bev_feat = bev_feat.half()
-
         if self.n_future > 0:
             present_state = states[:, -1:].contiguous()
 
@@ -179,11 +175,21 @@ class STP3(nn.Module):
 
             # predict the future
             states = self.future_prediction(future_prediction_input, states)    # (1, 9, 64, 200, 200)
+            
+            if mode == 'return_bev':
+                # return the bev features that are not decoded
+                bev_feat = states.contiguous().view(1, 4 * 64, 200, 200) # (1, 256, 200, 200)
+                bev_feat = bev_feat.half()
 
             # predict BEV outputs
             bev_output = self.decoder(states)
 
         else:
+            if mode == 'return_bev':
+                # return the bev features that are not decoded
+                bev_feat = states.contiguous().view(1, 3 * 64, 200, 200) # (1, 192, 200, 200)
+                bev_feat = bev_feat.half()
+            
             # Perceive BEV outputs
             bev_output = self.decoder(states)
 

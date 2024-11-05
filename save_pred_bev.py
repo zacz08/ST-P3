@@ -45,6 +45,9 @@ def eval(checkpoint_path, dataroot, mode):
     json_path = os.path.join(dataroot, json_name)
 
     trainer = TrainingModule.load_from_checkpoint(checkpoint_path, strict=True)
+
+    trainer.cfg.N_FUTURE_FRAMES = 1
+    
     print(f'Loaded weights from \n {checkpoint_path}')
     trainer.eval()
 
