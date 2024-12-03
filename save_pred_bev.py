@@ -31,7 +31,7 @@ def mk_save_dir():
 def eval(checkpoint_path, dataroot, mode):
     # save_folder_pred = mk_save_dir()
     folder_name = 'train_mini'
-    save_folder_pred = os.path.join(dataroot, 'bev_pred_stp3', folder_name)
+    save_folder_pred = os.path.join(dataroot, 'bev_pred_stp3_mask', folder_name)
     if not os.path.exists(save_folder_pred):
             os.makedirs(save_folder_pred)
 
@@ -41,7 +41,7 @@ def eval(checkpoint_path, dataroot, mode):
             os.makedirs(save_folder_bevfeat)
 
     bev_seg_gt_folder = os.path.join(dataroot, 'bev_seg_gt_stp3', folder_name)
-    json_name = 'prompt_stp3_' + folder_name + '.json'
+    json_name = 'prompt_stp3_mask_' + folder_name + '.json'
     json_path = os.path.join(dataroot, json_name)
 
     trainer = TrainingModule.load_from_checkpoint(checkpoint_path, strict=True)
@@ -117,51 +117,8 @@ def eval(checkpoint_path, dataroot, mode):
 
             n_present = model.receptive_field
 
-            # # semantic segmentation metric
-            # seg_prediction = output['segmentation'].detach()
-            # seg_prediction = torch.argmax(seg_prediction, dim=2, keepdim=True)
-            # metric_vehicle_val(seg_prediction[:, n_present - 1:], labels['segmentation'][:, n_present - 1:])
-
-            # if cfg.SEMANTIC_SEG.PEDESTRIAN.ENABLED:
-            #     pedestrian_prediction = output['pedestrian'].detach()
-            #     pedestrian_prediction = torch.argmax(pedestrian_prediction, dim=2, keepdim=True)
-            #     metric_pedestrian_val(pedestrian_prediction[:, n_present - 1:],
-            #                             labels['pedestrian'][:, n_present - 1:])
-            # else:
-            #     pedestrian_prediction = torch.zeros_like(seg_prediction)
-
-            # if cfg.SEMANTIC_SEG.HDMAP.ENABLED:
-            #     for i in range(len(hdmap_class)):
-            #         hdmap_prediction = output['hdmap'][:, 2 * i:2 * (i + 1)].detach()
-            #         hdmap_prediction = torch.argmax(hdmap_prediction, dim=1, keepdim=True)
-            #         metric_hdmap_val[i](hdmap_prediction, labels['hdmap'][:, i:i + 1])
-
-            # if cfg.INSTANCE_SEG.ENABLED:
-            #     pred_consistent_instance_seg = predict_instance_segmentation_and_trajectories(
-            #         output, compute_matched_centers=False, make_consistent=True
-            #     )
-            #     metric_panoptic_val(pred_consistent_instance_seg[:, n_present - 1:],
-            #                             labels['instance'][:, n_present - 1:])
-
-            # if cfg.PLANNING.ENABLED:
-            #     occupancy = torch.logical_or(seg_prediction, pedestrian_prediction)
-            #     _, final_traj = model.planning(
-            #         cam_front=output['cam_front'].detach(),
-            #         trajs=trajs[:, :, 1:],
-            #         gt_trajs=labels['gt_trajectory'][:, 1:],
-            #         cost_volume=output['costvolume'][:, n_present:].detach(),
-            #         semantic_pred=occupancy[:, n_present:].squeeze(2),
-            #         hd_map=output['hdmap'].detach(),
-            #         commands=command,
-            #         target_points=target_points
-            #     )
-            #     occupancy = torch.logical_or(labels['segmentation'][:, n_present:].squeeze(2),
-            #                                 labels['pedestrian'][:, n_present:].squeeze(2))
-            #     for i in range(future_second):
-            #         cur_time = (i+1)*2
-            #         metric_planning_val[i](final_traj[:,:cur_time].detach(), labels['gt_trajectory'][:,1:cur_time+1], occupancy[:,:cur_time])
-
-            save_bev(output, labels, batch, n_present, index, bev_token, save_folder_pred)
+            data_format = 'mask'
+            save_bev(output, labels, batch, n_present, index, bev_token, save_folder_pred, format=data_format)
 
             # write data to json file
             gt_save_path = get_seg_map_name_by_sample_token(
@@ -169,6 +126,10 @@ def eval(checkpoint_path, dataroot, mode):
                 bev_token)
             assert gt_save_path is not None, f"Can't find bev gt image with sample_token: {bev_token}"
             pred_seg_map_path = f"{index:05d}_bev_pred_{bev_token}.jpg"
+            
+            if data_format == 'mask':
+                pred_seg_map_path = pred_seg_map_path.replace('.jpg', '.npy')
+                gt_save_path = gt_save_path.replace('.jpg', '.npy')
             prompt = "bird's-eye-view semantic segmentation map"
 
             data = {
@@ -182,43 +143,16 @@ def eval(checkpoint_path, dataroot, mode):
             json_file.write('\n')  # 每行一个JSON对象
 
 
-    # results = {}
-
-    # scores = metric_vehicle_val.compute()
-    # results['vehicle_iou'] = scores[1]
-
-    # if cfg.SEMANTIC_SEG.PEDESTRIAN.ENABLED:
-    #     scores = metric_pedestrian_val.compute()
-    #     results['pedestrian_iou'] = scores[1]
-
-    # if cfg.SEMANTIC_SEG.HDMAP.ENABLED:
-    #     for i, name in enumerate(hdmap_class):
-    #         scores = metric_hdmap_val[i].compute()
-    #         results[name + '_iou'] = scores[1]
-
-    # if cfg.INSTANCE_SEG.ENABLED:
-    #     scores = metric_panoptic_val.compute()
-    #     for key, value in scores.items():
-    #         results['vehicle_'+key] = value[1]
-
-    # if cfg.PLANNING.ENABLED:
-    #     for i in range(future_second):
-    #         scores = metric_planning_val[i].compute()
-    #         for key, value in scores.items():
-    #             results['plan_'+key+'_{}s'.format(i+1)]=value.mean()
-
-    # for key, value in results.items():
-    #     print(f'{key} : {value.item()}')
-
-
-def save_bev(output, labels, batch, n_present, frame, bev_token, save_path_pred):
+def save_bev(output, labels, batch, n_present, frame, bev_token, save_path_pred, format='image', visulisize=False):
+    
+    assert format in ['image', 'mask'], 'Invalid format!'
+    
     hdmap = output['hdmap'].detach()
     segmentation = output['segmentation'][:, n_present - 1].detach()
     pedestrian = output['pedestrian'][:, n_present - 1].detach()
-    gt_trajs = labels['gt_trajectory']
 
-    fig = plt.figure(1, figsize=(10, 10))
-    # fig, ax = plt.subplots(figsize=(10, 10))
+    if format == 'image':
+        fig = plt.figure(1, figsize=(10, 10))
 
     # background: black
     showing = torch.zeros((200, 200, 3)).numpy()
@@ -228,53 +162,91 @@ def save_bev(output, labels, batch, n_present, frame, bev_token, save_path_pred)
     area = torch.argmax(hdmap[0, 2:4], dim=0).cpu().numpy()
     hdmap_index = area > 0
     showing[hdmap_index] = np.array([31 / 255, 119 / 255, 180 / 255])
+    if format == 'mask':
+        drivable_mask = torch.zeros((200, 200)).numpy()
+        drivable_mask[hdmap_index] = 1
 
     # lane
     area = torch.argmax(hdmap[0, 0:2], dim=0).cpu().numpy()
     hdmap_index = area > 0
     showing[hdmap_index] = np.array([255 / 255, 127 / 255, 14 / 255])
+    if format == 'mask':
+        lane_mask = torch.zeros((200, 200)).numpy()
+        lane_mask[hdmap_index] = 1
 
-    # # vehicle semantic
-    # semantic_seg = torch.argmax(segmentation[0], dim=0).cpu().numpy()
-    # semantic_index = semantic_seg > 0
-    # showing[semantic_index] = np.array([255 / 255, 128 / 255, 0 / 255])
+    # vehicle semantic
+    semantic_seg = torch.argmax(segmentation[0], dim=0).cpu().numpy()
+    semantic_index = semantic_seg > 0
+    showing[semantic_index] = np.array([255 / 255, 128 / 255, 0 / 255])
+    if format == 'mask':
+        vehicle_mask = torch.zeros((200, 200)).numpy()
+        vehicle_mask[semantic_index] = 1
 
-    # # pedestrian semantic
-    # pedestrian_seg = torch.argmax(pedestrian[0], dim=0).cpu().numpy()
-    # pedestrian_index = pedestrian_seg > 0
-    # showing[pedestrian_index] = np.array([28 / 255, 81 / 255, 227 / 255])
+    # pedestrian semantic
+    pedestrian_seg = torch.argmax(pedestrian[0], dim=0).cpu().numpy()
+    pedestrian_index = pedestrian_seg > 0
+    showing[pedestrian_index] = np.array([28 / 255, 81 / 255, 227 / 255])
+    if format == 'mask':
+        pedestrian_mask = torch.zeros((200, 200)).numpy()
+        pedestrian_mask[pedestrian_index] = 1
 
-    plt.imshow(showing)
-    plt.axis('off')
+    if format == 'mask':
+        combined_mask = np.stack([drivable_mask, lane_mask, vehicle_mask, pedestrian_mask], axis=0)
+        combined_mask = np.rot90(combined_mask, k=2, axes=(1, 2))
+        
+        save_path_pred = os.path.join(save_path_pred, f'{frame:05d}_bev_pred_{bev_token}.jpg')
+        np.save(save_path_pred.replace('.jpg', '.npy'), combined_mask)
 
+        if visulisize:
+            plt.figure(figsize=(10, 10))
+            plt.subplot(2, 2, 1)
+            plt.imshow(combined_mask[0], cmap='gray')
+            plt.axis('off')
+            plt.subplot(2, 2, 2)  
+            plt.imshow(combined_mask[1], cmap='gray')
+            plt.axis('off')
+            plt.subplot(2, 2, 3) 
+            plt.imshow(combined_mask[2], cmap='gray')
+            plt.axis('off')
+            plt.subplot(2, 2, 4)
+            plt.imshow(combined_mask[3], cmap='gray')
+            plt.axis('off')
+            plt.tight_layout()
+            plt.savefig(save_path_pred)
 
-    bx = np.array([-50.0 + 0.5/2.0, -50.0 + 0.5/2.0])
-    dx = np.array([0.5, 0.5])
-    # w, h = 1.85, 4.084
-    w, h = 1.68, 3.45
-    pts = np.array([
-        [-h / 2. + 0.5, w / 2.],
-        [h / 2. + 0.5, w / 2.],
-        [h / 2. + 0.5, -w / 2.],
-        [-h / 2. + 0.5, -w / 2.],
-    ])
-    pts = (pts - bx) / dx
-    pts[:, [0, 1]] = pts[:, [1, 0]]
-    plt.fill(pts[:, 0], pts[:, 1], 'w')
+    elif format == 'image':
 
-    fig.tight_layout(pad=0)
-    fig.canvas.draw()  # render the plot
-    
-    # Convert matplotlib image to NumPy array
-    img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)  # get image data
-    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))   # add channel dimension
+        plt.imshow(showing)
+        plt.axis('off')
 
-    # rotate image 180 degree
-    flipped_img = np.flipud(np.fliplr(img))
-    plt.close()
+        # draw the ego vehicle
+        bx = np.array([-50.0 + 0.5/2.0, -50.0 + 0.5/2.0])
+        dx = np.array([0.5, 0.5])
+        # w, h = 1.85, 4.084
+        w, h = 1.68, 3.45
+        pts = np.array([
+            [-h / 2. + 0.5, w / 2.],
+            [h / 2. + 0.5, w / 2.],
+            [h / 2. + 0.5, -w / 2.],
+            [-h / 2. + 0.5, -w / 2.],
+        ])
+        pts = (pts - bx) / dx
+        pts[:, [0, 1]] = pts[:, [1, 0]]
+        plt.fill(pts[:, 0], pts[:, 1], 'w')
 
-    save_path_pred = os.path.join(save_path_pred, f'{frame:05d}_bev_pred_{bev_token}.jpg')
-    cv2.imwrite(save_path_pred, cv2.cvtColor(cv2.resize(flipped_img, (512, 512)), cv2.COLOR_RGB2BGR))
+        fig.tight_layout(pad=0)
+        fig.canvas.draw()  # render the plot
+        
+        # Convert matplotlib image to NumPy array
+        img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)  # get image data
+        img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))   # add channel dimension
+
+        # rotate image 180 degree
+        flipped_img = np.flipud(np.fliplr(img))
+        plt.close()
+
+        save_path_pred = os.path.join(save_path_pred, f'{frame:05d}_bev_pred_{bev_token}.jpg')
+        cv2.imwrite(save_path_pred, cv2.cvtColor(cv2.resize(flipped_img, (512, 512)), cv2.COLOR_RGB2BGR))
     
 
 def save(output, labels, batch, n_present, frame, save_path):
