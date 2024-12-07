@@ -30,7 +30,7 @@ def mk_save_dir():
 
 def eval(checkpoint_path, dataroot, mode):
     # save_folder_pred = mk_save_dir()
-    folder_name = 'train_mini'
+    folder_name = 'train'
     save_folder_pred = os.path.join(dataroot, 'bev_pred_stp3_mask', folder_name)
     if not os.path.exists(save_folder_pred):
             os.makedirs(save_folder_pred)
@@ -40,7 +40,7 @@ def eval(checkpoint_path, dataroot, mode):
         if not os.path.exists(save_folder_bevfeat):
             os.makedirs(save_folder_bevfeat)
 
-    bev_seg_gt_folder = os.path.join(dataroot, 'bev_seg_gt_stp3', folder_name)
+    bev_seg_gt_folder = os.path.join(dataroot, 'bev_seg_gt_stp3_mask', folder_name)
     json_name = 'prompt_stp3_mask_' + folder_name + '.json'
     json_path = os.path.join(dataroot, json_name)
 
@@ -65,8 +65,8 @@ def eval(checkpoint_path, dataroot, mode):
 
     dataroot = cfg.DATASET.DATAROOT
     nworkers = cfg.N_WORKERS
-    # nusc = NuScenes(version='v1.0-{}'.format(cfg.DATASET.VERSION), dataroot=dataroot, verbose=False)
-    nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=False)
+    nusc = NuScenes(version='v1.0-{}'.format(cfg.DATASET.VERSION), dataroot=dataroot, verbose=False)
+    # nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=False)
     valdata = FuturePredictionDataset(nusc, 0, cfg)
     valloader = torch.utils.data.DataLoader(
         valdata, batch_size=cfg.BATCHSIZE, shuffle=False, num_workers=nworkers, pin_memory=True, drop_last=False
@@ -129,8 +129,7 @@ def eval(checkpoint_path, dataroot, mode):
             
             if data_format == 'mask':
                 pred_seg_map_path = pred_seg_map_path.replace('.jpg', '.npy')
-                gt_save_path = gt_save_path.replace('.jpg', '.npy')
-            prompt = "bird's-eye-view semantic segmentation map"
+                # gt_save_path = gt_save_path.replace('.jpg', '.npy')
 
             data = {
                 "bev_feat": bev_feat_name,
@@ -359,7 +358,7 @@ def get_seg_map_name_by_sample_token(
         
     for filename in os.listdir(folder_path):
         # get token by image name
-        if filename.endswith(".jpg"):
+        if filename.endswith(".jpg") or filename.endswith(".npy"):
             current_token = filename[len("00262_bev_gt_"):-len(".jpg")]
             if current_token == sample_token:
                 return filename
