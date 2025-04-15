@@ -133,7 +133,7 @@ class STP3(nn.Module):
         frustum = torch.stack((x_grid, y_grid, depth_grid), -1)
         return nn.Parameter(frustum, requires_grad=False)
 
-    def forward(self, image, intrinsics, extrinsics, future_egomotion, mode='trainval'):
+    def forward(self, image, intrinsics, extrinsics, future_egomotion, mode='trainval', bev_feat_type='perceptual'):
         output = {}
 
         # Only process features from the past and present
@@ -158,6 +158,10 @@ class STP3(nn.Module):
         #  Temporal model
         states = self.temporal_model(x) # (1,3,64,200,200)
 
+        if mode == 'return_bev' and bev_feat_type =='perceptual':
+            # return the spetial-temporal features
+            bev_feat = states.squeeze(0).reshape(3 * 64, 200, 200)  # make sure batchsize = 1
+
         if self.n_future > 0:
             present_state = states[:, -1:].contiguous()
 
@@ -176,10 +180,9 @@ class STP3(nn.Module):
             # predict the future
             states = self.future_prediction(future_prediction_input, states)    # (1, 9, 64, 200, 200)
             
-            if mode == 'return_bev':
+            if mode == 'return_bev' and bev_feat_type =='prediction':
                 # return the bev features that are not decoded
                 bev_feat = states.contiguous().view(1, 4 * 64, 200, 200) # (1, 256, 200, 200)
-                bev_feat = bev_feat.half()
 
             # predict BEV outputs
             bev_output = self.decoder(states)
@@ -188,7 +191,6 @@ class STP3(nn.Module):
             if mode == 'return_bev':
                 # return the bev features that are not decoded
                 bev_feat = states.contiguous().view(1, 3 * 64, 200, 200) # (1, 192, 200, 200)
-                bev_feat = bev_feat.half()
             
             # Perceive BEV outputs
             bev_output = self.decoder(states)
@@ -196,7 +198,7 @@ class STP3(nn.Module):
         output = {**output, **bev_output}
 
         if mode == 'return_bev':
-            return output, bev_feat
+            return output, bev_feat.half()
         else:
             return output
 
