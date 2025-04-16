@@ -29,19 +29,17 @@ def mk_save_dir():
     return save_path
 
 def eval(checkpoint_path, dataroot, mode, data_split):
-    # save_folder_pred = mk_save_dir()
-    folder_name = data_split
-    save_folder_pred = os.path.join(dataroot, 'bev_pred_stp3_mask', folder_name)
+    save_folder_pred = os.path.join(dataroot, 'bev_pred_stp3_mask', data_split)
     if not os.path.exists(save_folder_pred):
             os.makedirs(save_folder_pred)
 
     if mode == 'return_bev':
-        save_folder_bevfeat = os.path.join(dataroot, 'bev_feat_raw_stp3', folder_name)
+        save_folder_bevfeat = os.path.join(dataroot, 'bev_feat_raw_stp3', data_split)
         if not os.path.exists(save_folder_bevfeat):
             os.makedirs(save_folder_bevfeat)
 
-    bev_seg_gt_folder = os.path.join(dataroot, 'bev_seg_gt_stp3_mask', folder_name)
-    json_name = 'prompt_stp3_mask_' + folder_name + '.json'
+    bev_seg_gt_folder = os.path.join(dataroot, 'bev_seg_gt_stp3_mask', data_split)
+    json_name = 'prompt_stp3_mask_' + data_split + '.json'
     json_path = os.path.join(dataroot, json_name)
 
     trainer = TrainingModule.load_from_checkpoint(checkpoint_path, strict=True)
@@ -65,19 +63,19 @@ def eval(checkpoint_path, dataroot, mode, data_split):
 
     dataroot = cfg.DATASET.DATAROOT
     nworkers = cfg.N_WORKERS
-    if 'mini' in args.data_split:
+    if 'mini' in data_split:
         nusc = NuScenes(version='v1.0-mini', dataroot=dataroot, verbose=False)
     else:
         nusc = NuScenes(version='v1.0-trainval', dataroot=dataroot, verbose=False)
 
-    if 'train' in args.data_split:
+    if 'train' in data_split:
         data_index = 0
-    elif 'val' in args.data_split:
+    elif 'val' in data_split:
         data_index = 1
-    elif 'test' in args.data_split:
+    elif 'test' in data_split:
         data_index = 2
     else:
-        raise ValueError(f"Unexpected data_split value: {args.data_split}")
+        raise ValueError(f"Unexpected data_split value: {data_split}")
     
     valdata = FuturePredictionDataset(nusc, data_index, cfg)
     valloader = torch.utils.data.DataLoader(
